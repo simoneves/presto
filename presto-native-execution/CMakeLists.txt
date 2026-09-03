@@ -195,10 +195,15 @@ find_package(OpenSSL REQUIRED)
 
 find_package(Sodium REQUIRED)
 find_library(PROXYGEN proxygen)
-find_library(PROXYGEN_HTTPSERVER proxygen_httpserver)
+find_library(PROXYGEN_HTTPSERVER proxygenhttpserver)
 find_library(FIZZ fizz)
 find_library(WANGLE wangle)
-find_library(MVFST mvfst)
+# mvfst does not ship an aggregate library, so link the components Proxygen's
+# HTTP server requires.
+find_library(MVFST_EXCEPTION mvfst_exception)
+find_library(MVFST_FOLLY_UTILS mvfst_folly_utils)
+find_library(MVFST_CODEC_TYPES mvfst_codec_types)
+find_library(MVFST_CONTIGUOUS_CURSOR mvfst_contiguous_cursor)
 find_library(RE2 re2)
 find_package(fizz CONFIG)
 find_package(wangle CONFIG)
@@ -211,7 +216,10 @@ set(
   ${PROXYGEN}
   ${WANGLE}
   ${FIZZ}
-  ${MVFST}
+  ${MVFST_EXCEPTION}
+  ${MVFST_FOLLY_UTILS}
+  ${MVFST_CODEC_TYPES}
+  ${MVFST_CONTIGUOUS_CURSOR}
 )
 find_path(PROXYGEN_DIR NAMES include/proxygen)
 set(PROXYGEN_INCLUDE_DIR "${PROXYGEN_DIR}/include/")
