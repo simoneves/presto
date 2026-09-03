@@ -98,6 +98,38 @@ std::vector<std::string> getNames(const protocol::Assignments& assignments) {
   return names;
 }
 
+// Map Presto planner variables that are NOT NULL onto Velox target column
+// names. Velox InsertTableHandle::notNullColumns() must be a subset of
+// TableWriteNode::columnNames(), which are aligned 1:1 with `columns`.
+folly::F14FastSet<std::string> toNotNullColumns(
+    const std::vector<protocol::VariableReferenceExpression>&
+        notNullColumnVariables,
+    const std::vector<protocol::VariableReferenceExpression>& columns,
+    const std::vector<std::string>& columnNames) {
+  VELOX_CHECK_EQ(columns.size(), columnNames.size());
+  folly::F14FastSet<std::string> notNullColumns;
+  if (notNullColumnVariables.empty()) {
+    return notNullColumns;
+  }
+
+  std::unordered_map<std::string, size_t> indexByName;
+  indexByName.reserve(columns.size());
+  for (size_t i = 0; i < columns.size(); ++i) {
+    indexByName.emplace(columns[i].name, i);
+  }
+
+  notNullColumns.reserve(notNullColumnVariables.size());
+  for (const auto& variable : notNullColumnVariables) {
+    const auto it = indexByName.find(variable.name);
+    VELOX_USER_CHECK(
+        it != indexByName.end(),
+        "NOT NULL column variable '{}' is not in TableWriter columns",
+        variable.name);
+    notNullColumns.insert(columnNames[it->second]);
+  }
+  return notNullColumns;
+}
+
 RowTypePtr toRowType(
     const std::vector<protocol::VariableReferenceExpression>& variables,
     const TypeParser& typeParser,
@@ -1601,7 +1633,10 @@ VeloxQueryPlanConverterBase::toVeloxQueryPlan(
   }
 
   auto insertTableHandle = std::make_shared<core::InsertTableHandle>(
-      connectorId, connectorInsertHandle);
+      connectorId,
+      connectorInsertHandle,
+      toNotNullColumns(
+          node->notNullColumnVariables, node->columns, node->columnNames));
 
   const auto outputType = toRowType(
       generateOutputVariables(
@@ -1662,7 +1697,10 @@ VeloxQueryPlanConverterBase::toVeloxQueryPlan(
   }
 
   auto insertTableHandle = std::make_shared<core::InsertTableHandle>(
-      connectorId, connectorInsertHandle);
+      connectorId,
+      connectorInsertHandle,
+      toNotNullColumns(
+          node->notNullColumnVariables, node->columns, node->columnNames));
 
   const auto outputType = toRowType(
       generateOutputVariables(
@@ -1711,7 +1749,7 @@ VeloxQueryPlanConverterBase::toVeloxQueryPlan(
   }
 
   auto insertTableHandle = std::make_shared<core::InsertTableHandle>(
-      connectorId, connectorInsertHandle);
+      connectorId, connectorInsertHandle, folly::F14FastSet<std::string>{});
 
   // [ICEBERG-FIX bug 1B]: Build outputType from node->outputVariables
   // — the Java QueryPlanner.plan(Delete) now declares 3 vars
@@ -1958,7 +1996,9 @@ velox::core::PlanNodePtr VeloxQueryPlanConverterBase::toVeloxQueryPlan(
         connectorId);
   }
   auto insertTableHandle = std::make_shared<core::InsertTableHandle>(
-      connectorId, std::shared_ptr(std::move(veloxHandle)));
+      connectorId,
+      std::shared_ptr(std::move(veloxHandle)),
+      folly::F14FastSet<std::string>{});
 
   // 2. Translate source plan. The source is the IcebergMergeProcessorNode
   //    (Layer 3c) when the upstream pipeline went through the
