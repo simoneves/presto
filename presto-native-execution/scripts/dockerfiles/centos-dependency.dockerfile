@@ -25,6 +25,8 @@ ENV CXX=/opt/rh/gcc-toolset-12/root/bin/g++
 ENV ARM_BUILD_TARGET=${ARM_BUILD_TARGET}
 ENV CUDA_VERSION=${CUDA_VERSION:-12.9}
 ENV UCX_VERSION="1.19.0"
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
 
 RUN mkdir -p /scripts /velox/scripts
 COPY scripts /scripts
@@ -48,11 +50,15 @@ RUN bash -c "mkdir build && \
                  install_adapters && \
                  install_clang15 && \
                  install_cuda ${CUDA_VERSION} && \
-                 install_ucx) && \
+                 install_ucx && \
+                 install_rust) && \
     rm -rf build"
 
 # put CUDA binaries on the PATH
 ENV PATH=/usr/local/cuda/bin:${PATH}
+
+# put the Rust toolchain on the PATH
+ENV PATH=/usr/local/cargo/bin:${PATH}
 
 # configuration for nvidia-container-toolkit
 ENV NVIDIA_VISIBLE_DEVICES=all
